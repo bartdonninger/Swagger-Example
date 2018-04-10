@@ -11,6 +11,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Net.Http.Headers;
 using NJsonSchema;
 using NSwag;
 using NSwag.AspNetCore;
@@ -56,40 +57,54 @@ namespace Swagger_Example
             }
 
             // Enable the Swagger UI middleware and the Swagger generator
-            app.UseSwaggerUi3(typeof(Startup).GetTypeInfo().Assembly, settings =>
+            app.UseSwaggerUi(typeof(Startup).GetTypeInfo().Assembly, settings =>
             {
                 settings.GeneratorSettings.DefaultPropertyNameHandling = PropertyNameHandling.CamelCase;
                 settings.GeneratorSettings.Title = "Test Swagger API";
                 settings.GeneratorSettings.Title = "Test Swagger Description";
-                settings.GeneratorSettings.DocumentProcessors.Add(new SecurityDefinitionAppender("apikey",
-                    new SwaggerSecurityScheme
-                    {
-                        Type = SwaggerSecuritySchemeType.ApiKey,
-                        Name = "api_key",
-                        In = SwaggerSecurityApiKeyLocation.Header,
-                        
-                    }));
-                settings.GeneratorSettings.DocumentProcessors.Add(new MyDocumentProcessor());
+                settings.GeneratorSettings.OperationProcessors.Add(new CustomHeaderOperationProcessor(new CustomHeader("TestHeader")));
             });
 
             app.UseMvc();
         }
 
-        public class MyDocumentProcessor : IDocumentProcessor
+        public class CustomHeaderOperationProcessor : IOperationProcessor
         {
+            private readonly CustomHeader _header;
 
-            // TODO: This is not included in the header :(
-            public async Task ProcessAsync(DocumentProcessorContext context)
+            public CustomHeaderOperationProcessor(CustomHeader customHeader)
             {
-                context.Document.Parameters.Add("test", new SwaggerParameter
+                _header = customHeader;
+            }
+
+            public Task<bool> ProcessAsync(OperationProcessorContext context)
+            {
+                context.OperationDescription.Operation.Parameters.Add(
+                    new SwaggerParameter
                     {
-                        Name = "TestHeader",
+                        Name = _header.Name,
                         Type = JsonObjectType.String,
                         Kind = SwaggerParameterKind.Header,
-                        IsRequired = true,
-                        Description = "blaa description"
+                        IsRequired = _header.Required,
+                        Description = _header.Description,
+                        Default = _header.DefaultValue
                     }
                 );
+
+                return Task.FromResult(true);
+            }
+        }
+
+        public class CustomHeader
+        {
+            public string Name;
+            public string DefaultValue;
+            public string Description;
+            public bool Required;
+
+            public CustomHeader(string name)
+            {
+                Name = name;
             }
         }
     }
